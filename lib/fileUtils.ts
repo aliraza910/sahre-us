@@ -78,6 +78,29 @@ export function codeToRoomId(code: string): string {
   ].join('-')
 }
 
+/**
+ * Decode the 6-character room code from a deterministic UUID.
+ */
+export function roomIdToCode(uuid: string): string | null {
+  const clean = uuid.replace(/-/g, '').toLowerCase()
+  if (clean.length !== 32) return null
+  let code = ''
+  try {
+    for (let i = 0; i < 12; i += 2) {
+      const hexPair = clean.slice(i, i + 2)
+      const charCode = parseInt(hexPair, 16)
+      if (isNaN(charCode) || charCode === 0) return null
+      code += String.fromCharCode(charCode)
+    }
+    const upper = code.toUpperCase()
+    if (/^[A-Z0-9]{6}$/.test(upper)) {
+      return upper
+    }
+  } catch {}
+  return null
+}
+
+
 
 /**
  * Slice a File into ArrayBuffer chunks

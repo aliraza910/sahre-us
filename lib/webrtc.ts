@@ -44,7 +44,7 @@ export class WebRTCManager {
   onProgress: ProgressCallback = () => {}
   onPeerJoin: PeerCallback = () => {}
   onPeerLeave: PeerCallback = () => {}
-  onFileReceived: (fileName: string, blob: Blob) => void = (name, blob) => downloadBlob(blob, name)
+  onFileReceived: (fileName: string, blob: Blob, senderPeerId: string) => void = () => {}
 
   constructor(localPeerId: string, signaling: SignalingService) {
     this.localPeerId = localPeerId
@@ -243,7 +243,7 @@ export class WebRTCManager {
           receivedBytes = 0
         } else if (msg.type === 'end' && receivedMeta) {
           const blob = new Blob(chunks, { type: receivedMeta.mime || 'application/octet-stream' })
-          this.onFileReceived(receivedMeta.name, blob)
+          this.onFileReceived(receivedMeta.name, blob, remotePeerId)
           this.onProgress({
             peerId: remotePeerId,
             fileName: receivedMeta.name,

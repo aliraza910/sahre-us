@@ -69,6 +69,22 @@ export default function HomePage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+      
+      // Save host token locally so the user is identified as host
+      try {
+        const store = JSON.parse(localStorage.getItem('dropzap:rooms') ?? '{}')
+        store[data.roomId] = {
+          id: data.roomId,
+          shortCode: data.shortCode,
+          expiresAt: data.expiresAt,
+          hasPassword: data.hasPassword,
+          hostToken: data.hostToken,
+        }
+        localStorage.setItem('dropzap:rooms', JSON.stringify(store))
+      } catch (e) {
+        console.error('Failed to save host token locally', e)
+      }
+
       setShowCreateDialog(false)
       router.push(`/room/${data.roomId}`)
     } catch (err: unknown) {

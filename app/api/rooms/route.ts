@@ -17,15 +17,18 @@ function checkRateLimit(ip: string): boolean {
   return true
 }
 
+async function hashPassword(password: string): Promise<string> {
+  const enc = new TextEncoder()
+  const buf = await crypto.subtle.digest('SHA-256', enc.encode(password))
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 // POST /api/rooms — create a new room
 export async function POST(req: NextRequest) {
   const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown'
 
   if (!checkRateLimit(ip)) {
-    return NextResponse.json(
-      { error: 'Too many rooms created. Try again in an hour.' },
-      { status: 429 }
-    )
+    return NextResponse.json({ error: 'Too many rooms created. Try again in an hour.' }, { status: 429 })
   }
 
   try {
@@ -34,38 +37,29 @@ export async function POST(req: NextRequest) {
 
     let short_code: string
     if (customCode && /^[A-Z0-9]{6}$/.test(customCode)) {
-      // User-specified code — use directly (collision will be caught by DB unique constraint)
       short_code = customCode
     } else {
       short_code = generateRoomCode()
       let attempts = 0
-      // Ensure uniqueness (rare collision retry)
       while (attempts < 5) {
         try {
           const { data: existing } = await supabaseAdmin
-            .from('rooms')
-            .select('id')
-            .eq('short_code', short_code)
-            .single()
+            .from('rooms').select('id').eq('short_code', short_code).single()
           if (!existing) break
-        } catch { break } // DB error = treat as no collision
+        } catch { break }
         short_code = generateRoomCode()
         attempts++
       }
     }
 
-    let password_hash: string | null = null
-    if (password) {
-      // Simple hash using crypto (no bcrypt needed for MVP)
-      const enc = new TextEncoder()
-      const buf = await crypto.subtle.digest('SHA-256', enc.encode(password))
-      password_hash = Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')
-    }
+    const password_hash = password ? await hashPassword(password) : null
+    // Each room creator gets a secret host_token — only they can delete the room
+    const host_token = crypto.randomUUID()
 
     try {
       const { data: room, error } = await supabaseAdmin
         .from('rooms')
-        .insert({ short_code, password_hash })
+        .insert({ short_code, password_hash, host_token })
         .select()
         .single()
 
@@ -76,14 +70,16 @@ export async function POST(req: NextRequest) {
         shortCode: room.short_code,
         expiresAt: room.expires_at,
         hasPassword: !!password_hash,
+        hostToken: host_token,        // returned only at creation time
       })
     } catch (dbErr) {
-      console.warn('[Supabase Fallback] Query failed, using deterministic local room:', dbErr)
+      console.warn('[Supabase Fallback] Using deterministic local room:', dbErr)
       return NextResponse.json({
         roomId: codeToRoomId(short_code),
         shortCode: short_code,
         expiresAt: new Date(Date.now() + 3600_000).toISOString(),
         hasPassword: !!password_hash,
+        hostToken: host_token,
         isLocalFallback: true,
       })
     }

@@ -14,6 +14,9 @@ export type SignalType =
   | 'file-meta'
   | 'transfer-complete'
   | 'ping'
+  | 'chat-msg'
+  | 'chat-typing'
+  | 'kick'
 
 export type SignalPayload = {
   type: SignalType
